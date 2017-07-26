@@ -112,8 +112,8 @@ def lnprob(params, MJD, mag, err, model="DRW", mode='KBS09'):
 
 
 
-def minimizee(params, MJD, mag, err, model="DRW"):
-	return -((lnlikelihood(params, MJD, mag, err, model, mode='S10')))
+# def minimizee(params, MJD, mag, err, model="DRW"):
+# 	return -((lnlikelihood(params, MJD, mag, err, model, mode='S10')))
 
 def SF_fit_params(MJD, mag, err, p0=[0.5, 0.5], model="DRW", MCMC_step=1000, MCMC_threads=8, mode='KBS09'):
 	# print "mag: ", mag
