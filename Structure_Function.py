@@ -428,28 +428,28 @@ if __name__ == "__main__":
 
 	DRW_dict = {}
 
-	plt.scatter(paper_sigma, fit_sigma, color='blue')
-	plt.plot(paper_sigma, paper_sigma, color='black')
-	plt.xlabel('paper sigma')
-	plt.ylabel('fitted sigma')
-	plt.show()
-	# plt.savefig('./sigma_paper_vs_code.png')
-	plt.close()
+	# plt.scatter(paper_sigma, fit_sigma, color='blue')
+	# plt.plot(paper_sigma, paper_sigma, color='black')
+	# plt.xlabel('paper sigma')
+	# plt.ylabel('fitted sigma')
+	# plt.show()
+	# # plt.savefig('./sigma_paper_vs_code.png')
+	# plt.close()
 
-	plt.scatter(paper_tau, fit_tau, color='red')
-	plt.plot(paper_tau, paper_tau, color='black')
-	plt.xlabel('paper tau')
-	plt.ylabel('fitted tau')
-	plt.show()
-	# plt.savefig('./sigma_paper_vs_code.png')
-	plt.close()
+	# plt.scatter(paper_tau, fit_tau, color='red')
+	# plt.plot(paper_tau, paper_tau, color='black')
+	# plt.xlabel('paper tau')
+	# plt.ylabel('fitted tau')
+	# plt.show()
+	# # plt.savefig('./sigma_paper_vs_code.png')
+	# plt.close()
 
-	DRW_dict['paper_sigma'] = paper_sigma
-	DRW_dict['paper_tau'] = paper_tau
-	DRW_dict['fit_sigma'] = fit_sigma
-	DRW_dict['fit_tau'] = fit_tau
+	# DRW_dict['paper_sigma'] = paper_sigma
+	# DRW_dict['paper_tau'] = paper_tau
+	# DRW_dict['fit_sigma'] = fit_sigma
+	# DRW_dict['fit_tau'] = fit_tau
 
-	sio.savemat('./DRW_params_2.mat', DRW_dict)
+	sio.savemat('./DRW_params_test.mat', DRW_dict)
 
 
 
