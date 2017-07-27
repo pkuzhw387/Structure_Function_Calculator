@@ -91,13 +91,19 @@ def prior(params, MJD, model='DRW'):
 	# 		
 	if model == 'DRW':
 		b, sigma, tau = params
+		baseline = MJD[-1] - MJD[0]
 		intv = MJD[1:] - MJD[0:-1]
 		# # KBS09 prior
 		# med_intv = np.median(intv)
-		# return np.exp(-med_intv / tau) * med_intv / tau**2
+		# prior = np.exp(-med_intv / tau) * med_intv / tau**2
 		
 		# Koz10 prior
-		return 1 / (tau * sigma)
+		prior = 1 / (tau * sigma)
+
+		if tau > 4.0 * baseline:
+			prior = -np.inf
+
+		return prior
 
 	elif model == 'pow-law':
 		A = np.exp(params[0])
@@ -296,8 +302,8 @@ def SF_fit_params(MJD, mag, err, obj_name=None, model="DRW", mode='KBS09', n_wal
 		p_best = [0] * 2
 		p_best[:] = map(lambda v: (v[1], v[2]-v[1], v[1]-v[0]), zip(*np.percentile(samples, [16, 50, 84], axis=0)))
 		p_dict = {}
-		p_dict['A'] = [np.exp(p_best[0][i]) for i in range(len(p_best[0]))]
-		p_dict['gamma'] = p_best[1]
+		p_dict['A'] = np.exp(p_best[0][0])
+		p_dict['gamma'] = p_best[1][0]
 
 	return p_dict
 
@@ -356,13 +362,13 @@ def SF_true(t, y, yerr, zp1, n_dt = 10):
 
 
 if __name__ == "__main__":
-	drw_path = '/Users/zhanghaowen/Desktop/AGN/BroadBand_RM/data/s82drw_g.dat'
+	drw_path = '/home/haowen/AGN/BroadBand_RM/data/s82drw_g.dat'
 	drw_data = pd.read_csv(drw_path, header=None, skiprows=3, \
-			   names=['SDR5ID', 'lgTau', 'lgSigma', 'Plike', 'Pnoise', 'Pinf', 'npts'],\
-			   usecols=[0, 7, 8, 14, 15, 16, 18], delim_whitespace=True,\
+			   names=['SDR5ID', 'lgTau', 'lgSigma', 'edge', 'Plike', 'Pnoise', 'Pinf', 'npts'],\
+			   usecols=[0, 7, 8, 13, 14, 15, 16, 18], delim_whitespace=True,\
 			   dtype={'SDR5ID': str, 'lgTau': np.float64, 'lgSigma': np.float64, \
 			   'Plike': np.float64, 'Pnoise': np.float64, 'Pinf': np.float64, 'npts': int})
-	dbID_path = '/users/zhanghaowen/Desktop/AGN/BroadBand_RM/data/DB_QSO_S82.dat'
+	dbID_path = '/home/haowen/AGN/BroadBand_RM/data/DB_QSO_S82.dat'
 	dbID_data = pd.read_csv(dbID_path, header=None, names=['dbID', 'SDR5ID'],\
 							usecols=[0, 3], delim_whitespace=True, dtype=str)
 
@@ -372,17 +378,17 @@ if __name__ == "__main__":
 	fit_tau = []
 	test_set = np.random.choice(9258, size=20)
 	j = 0
-	for i in range(20):
+	for i in range(100):
 
 		if drw_data['lgSigma'][i] <= -10 or drw_data['npts'][i] < 10 or\
 		   drw_data['Plike'][i] - drw_data['Pnoise'][i] <= 2 or\
-		   drw_data['Plike'][i] - drw_data['Pinf'][i] <= 0.05:
+		   drw_data['Plike'][i] - drw_data['Pinf'][i] <= 0.05 or drw_data['edge'][i] != 0:
 
 		   print "skip."
 		   continue
 		# print np.where(dbID_data['SDR5ID'] == drw_data['SDR5ID'][i])
 		dbID = np.array(dbID_data['dbID'])[np.where(dbID_data['SDR5ID'] == drw_data['SDR5ID'][i])][0]
-		lc_path = '/Users/zhanghaowen/Desktop/AGN/BroadBand_RM/QSO_S82/%s' %dbID
+		lc_path = '/home/haowen/AGN/BroadBand_RM/QSO_S82/%s' %dbID
 		lc_data = pd.read_csv(lc_path, header=None, names=['MJD', 'mag', 'err'],\
 							  usecols=[3, 4, 5], delim_whitespace=True, dtype=np.float64)
 
@@ -390,6 +396,7 @@ if __name__ == "__main__":
 		mag = np.array(lc_data['mag'])
 		err = np.array(lc_data['err'])
 		mask = mag == -99.99
+
 		MJD = np.ma.array(MJD, mask=mask).compressed()
 		mag = np.ma.array(mag, mask=mask).compressed()
 		err = np.ma.array(err, mask=mask).compressed()
