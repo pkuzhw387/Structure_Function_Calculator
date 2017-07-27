@@ -14,12 +14,20 @@ def SF_PL(params, del_t):
 	# model structure function under power-law model. 
 	# Parameters:
 	# ------------
+	# 
 	# params: array of shape (2,)
 	# 		params[0]: np.log(A)
 	# 		params[1]: gamma
 	# 		
 	# del_t: float
 	# 		The time separation between two measurements.
+	# 
+	# 				
+	# Returns:
+	# ------------
+	# 
+	# The value of the structure function value at a given time separation del_t
+	# and under a given set of structure function parameters params.
 	A = np.exp(params[0])
 	gamma = params[1]
 	return A * (abs(del_t) / 365.25)**gamma
@@ -29,6 +37,7 @@ def SF_DRW(params, del_t):
 	# model structure function under DRW model. 
 	# Parameters:
 	# ------------
+	# 
 	# params: array of shape (3,)
 	# 		params[0]: mean magnitude b
 	# 		params[1]: sigma_KBS09
@@ -36,6 +45,13 @@ def SF_DRW(params, del_t):
 	# 		
 	# del_t: float
 	# 		The time separation between two measurements.
+	# 		
+	# 		
+	# Returns:
+	# ------------
+	# 
+	# The value of the structure function value at a given time separation del_t
+	# and under a given set of structure function parameters params.
 	sigma, tau = params[0:2]
 	return 2.0**0.5 * abs(sigma) * (1 - np.exp(-abs(del_t) / tau))**0.5
 
@@ -44,6 +60,7 @@ def lnLij(MJD, mag, err, params, i, j, model="DRW"):
 	# Lij term of Schmidt et al. (2010)
 	# Parameters:
 	# -------------
+	# 
 	# MJD: array
 	# 		MJD array of the light curve.
 	# 
@@ -63,6 +80,13 @@ def lnLij(MJD, mag, err, params, i, j, model="DRW"):
 	# 		structure function model adopted. 
 	# 		Default: 'DRW'
 	# 		
+	# 		
+	# Returns:
+	# ------------
+	# 
+	# result: float
+	# 		the lnlikelihood value under contributed by (ti, tj) measurement pair.
+	# 		
 	del_t = MJD[j] - MJD[i]
 	del_mag = mag[j] - mag[i]
 
@@ -79,8 +103,10 @@ def prior(params, MJD, model='DRW'):
 	# prior distribution of the parameters
 	# Parameters:
 	# ------------
+	# 
 	# params: array
-	# 		c.f. SF_PL() and SF_DRW() for meanings of this parameter under different models.
+	# 		c.f. SF_PL() and SF_DRW() for meanings of this parameter
+	# 		under different models.
 	# 		
 	# MJD: array
 	# 		MJD array of the light curve.
@@ -88,6 +114,14 @@ def prior(params, MJD, model='DRW'):
 	# model: str, optional
 	# 		structure function model adopted. 
 	# 		Default: 'DRW'
+	# 		
+	# 
+	# Returns:
+	# ------------
+	# 
+	# prior: float
+	# 		prior distribution value under a certain structure function
+	# 		value and set of given parameters params.
 	# 		
 	if model == 'DRW':
 		b, sigma, tau = params
@@ -108,7 +142,10 @@ def prior(params, MJD, model='DRW'):
 	elif model == 'pow-law':
 		A = np.exp(params[0])
 		gamma = params[1]
-		return 1 / (A * (1 + gamma**2))
+		prior = 1 / (A * (1 + gamma**2))
+		if A > 10 or gamma < 0 or gamma > 1:
+			prior = -np.inf
+		return prior
 
 
 def lnlikelihood(params, MJD, mag, err, model="DRW", mode='KBS09'):
@@ -137,6 +174,14 @@ def lnlikelihood(params, MJD, mag, err, model="DRW", mode='KBS09'):
 	# 		'KBS09': c.f. Kelly+09, complexity: O(N)
 	# 		'S10': c.f. Schmidt+10, complexity: O(N^2) 
 	# 	
+	# 	
+	# Returns:
+	# --------------
+	# 
+	# result: float
+	# 		total lnlikelihood value under a given structure function model
+	# 		and set of parameters.
+	# 
 	if mode == 'KBS09':
 		# Actually in the 'KBS09' mode only DRW model is implemented.
 		if model == 'DRW':
@@ -198,7 +243,15 @@ def lnprob(params, MJD, mag, err, model="DRW", mode='KBS09'):
 	# mode: str, optional
 	# 		specific likelihood calculating scheme adopted.
 	# 		'KBS09': c.f. Kelly+09, complexity: O(N)
-	# 		'S10': c.f. Schmidt+10, complexity: O(N^2) 
+	# 		'S10': c.f. Schmidt+10, complexity: O(N^2)
+	# 		
+	# 
+	# Returns:
+	# ------------
+	# 
+	# lnp: float
+	# 		ln(posterior) value of a certain light curve under a given model
+	# 		and set of parameters. 
 	# 
 	lnp = lnlikelihood(params=params, MJD=MJD, mag=mag, err=err, model=model, mode=mode) + np.log(prior(params, MJD, model=model))
 	if not np.isfinite(lnp):
@@ -249,6 +302,24 @@ def SF_fit_params(MJD, mag, err, obj_name=None, model="DRW", mode='KBS09', n_wal
 	# 		number of threads in MCMC.
 	# 		Default: 4
 	# 		
+	# 
+	# Returns:
+	# -----------
+	# 
+	# p_dict: dict
+	# 		parameter estimation dictionary.
+	# 		If model == 'DRW',
+	# 			p_dict.keys() = ['sigma_KBS09', 'tau', 'sigma_M10'],
+	# 			and each key corresponds to an array (tuple?) of shape (3,).
+	# 			e.g. p_dict['tau'][0] is the value estimation itself, 
+	# 				 p_dict['tau'][1] is the upper error bar,
+	# 				 p_dict['tau'][2] is the lower error bar.
+	# 				 
+	# 		If model == 'pow-law':
+	# 			p_dict.keys() = ['A', 'gamma'],
+	# 			and each key corresponds to the value estimation themselves. 
+	# 			i.e. p_dict['A'] == A.
+	# 				
 	p_dict = {}
 	if model == "DRW":
 		ndim = 3
