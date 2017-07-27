@@ -11,64 +11,133 @@ import corner
 
 
 def SF_PL(params, del_t):
+	# model structure function under power-law model. 
+	# Parameters:
+	# ------------
+	# params: array of shape (2,)
+	# 		params[0]: np.log(A)
+	# 		params[1]: gamma
+	# 		
+	# del_t: float
+	# 		The time separation between two measurements.
 	A = np.exp(params[0])
 	gamma = params[1]
-	# print "parameters: ", params
-	# print "SF_PL: ", A * (abs(del_t) / 365.25)**gamma
-	return abs(A) * (abs(del_t) / 365.25)**gamma
+	return A * (abs(del_t) / 365.25)**gamma
+
 
 def SF_DRW(params, del_t):
+	# model structure function under DRW model. 
+	# Parameters:
+	# ------------
+	# params: array of shape (3,)
+	# 		params[0]: mean magnitude b
+	# 		params[1]: sigma_KBS09
+	# 		params[2]: relax time-scale tau 
+	# 		
+	# del_t: float
+	# 		The time separation between two measurements.
 	sigma, tau = params[0:2]
 	return 2.0**0.5 * abs(sigma) * (1 - np.exp(-abs(del_t) / tau))**0.5
 
 # c.f. Schmidt et al. (2010)
 def lnLij(MJD, mag, err, params, i, j, model="DRW"):
+	# Lij term of Schmidt et al. (2010)
+	# Parameters:
+	# -------------
+	# MJD: array
+	# 		MJD array of the light curve.
+	# 
+	# mag: array
+	# 		magnitude array of the light curve. 
+	# 
+	# err: array
+	# 		error bar array of the light curve. 
+	# 		
+	# params: array
+	# 		c.f. SF_PL() and SF_DRW() for meanings of this parameter under different models.
+	# 
+	# i, j: ints
+	# 		index of the pair of points to be calculated into the light curve array. 
+	# 		
+	# model: str, optional
+	# 		structure function model adopted. 
+	# 		Default: 'DRW'
+	# 		
 	del_t = MJD[j] - MJD[i]
 	del_mag = mag[j] - mag[i]
-	# print "del_t: ", del_t, " del_mag: ", del_mag
+
 	if model == "pow-law":
 		V_eff2 = SF_PL(params, del_t)**2 + (err[i]**2 + err[j]**2)
-		# print "V_eff: ", V_eff
-		# yyy = raw_input('just for pause')
 	elif model == "DRW":
 		V_eff2 = SF_DRW(params, del_t)**2 + (err[i]**2 + err[j]**2)
 
 	result = - np.log(2 * np.pi * V_eff2) / 2.0 - del_mag**2 / (2 * V_eff2)
-	# print "Lij: ", result
 	return result
 
 
-
-
 def prior(params, MJD, model='DRW'):
+	# prior distribution of the parameters
+	# Parameters:
+	# ------------
+	# params: array
+	# 		c.f. SF_PL() and SF_DRW() for meanings of this parameter under different models.
+	# 		
+	# MJD: array
+	# 		MJD array of the light curve.
+	# 
+	# model: str, optional
+	# 		structure function model adopted. 
+	# 		Default: 'DRW'
+	# 		
 	if model == 'DRW':
-
 		b, sigma, tau = params
 		intv = MJD[1:] - MJD[0:-1]
-		# KBS09 prior
+		# # KBS09 prior
 		# med_intv = np.median(intv)
 		# return np.exp(-med_intv / tau) * med_intv / tau**2
+		
 		# Koz10 prior
 		return 1 / (tau * sigma)
+
 	elif model == 'pow-law':
 		A = np.exp(params[0])
 		gamma = params[1]
 		return 1 / (A * (1 + gamma**2))
 
 
-
-
-
 def lnlikelihood(params, MJD, mag, err, model="DRW", mode='KBS09'):
+	# lnlikelihood function in MCMC
+	# Parameters:
+	# -------------
+	# 
+	# params: array
+	# 		c.f. SF_PL() and SF_DRW() for meanings of this parameter under different models.
+	# 
+	# MJD: array
+	# 		MJD array of the light curve.
+	# 
+	# mag: array
+	# 		magnitude array of the light curve. 
+	# 
+	# err: array
+	# 		error bar array of the light curve. 
+	# 
+	# model: str, optional
+	# 		structure function model adopted. 
+	# 		Default: 'DRW'
+	# 		
+	# mode: str, optional
+	# 		specific likelihood calculating scheme adopted.
+	# 		'KBS09': c.f. Kelly+09, complexity: O(N)
+	# 		'S10': c.f. Schmidt+10, complexity: O(N^2) 
+	# 	
 	if mode == 'KBS09':
+		# Actually in the 'KBS09' mode only DRW model is implemented.
 		if model == 'DRW':
-
 			intv = MJD[1:] - MJD[0:-1]
-			med_intv = np.median(intv)
-
 			b, sigma, tau = params
-
-			if 10 < b < 30 and 0 < tau * sigma**2 / 2 < 5 and 0 < tau < 4000 and sigma > 0: 
+			hard_limit = 10 < b < 30 and 0 < tau * sigma**2 / 2 < 5 and 0 < tau < 4000 and sigma > 0
+			if hard_limit: 
 				# x* -> x_s
 				# x^ -> x_h
 				Omega = np.zeros(len(mag))
@@ -79,65 +148,110 @@ def lnlikelihood(params, MJD, mag, err, model="DRW", mode='KBS09'):
 				x_s[:] = mag[:] - b
 				x_h[0] = 0
 				Omega[0] = sigma**2 * tau / 2
-
-
 				for i in range(1, len(mag)):
 					Omega[i] = Omega[0] * (1 - a[i]**2) + a[i]**2 * Omega[i - 1] * (1 - Omega[i - 1] / (Omega[i - 1] + err[i - 1]**2))
 					x_h[i] = a[i] * x_h[i - 1] + a[i] * Omega[i - 1] * (x_s[i - 1] - x_h[i - 1]) / (Omega[i - 1] + err[i - 1]**2)
 
 				result = -0.5 * np.sum(np.log(Omega + err**2)) - 0.5 * np.sum((x_s - x_h)**2 / (Omega + err**2)) - len(mag) / 2.0 * np.log(2 * np.pi) 
-				
 				return result
 			else:
 				return -np.inf
+		elif model == 'pow-law':
+			raise NotImplementedError, "power-law model under KBS09 mode isn't implemented yet."
+			exit()
+
 	elif mode == 'S10':
-		lnlikelihood = 0.0
+		result = 0.0
 		for i in range(len(mag)):
 			for j in range(i + 1, len(mag)):
-				lnlikelihood += lnLij(MJD=MJD, mag=mag, err=err, params=params, i=i, j=j, model=model)
-		# print lnlikelihood
-		return lnlikelihood
-
-
-
-
+				result += lnLij(MJD=MJD, mag=mag, err=err, params=params, i=i, j=j, model=model)
+		return result
 
 
 def lnprob(params, MJD, mag, err, model="DRW", mode='KBS09'):
-	if mode == 'KBS09':
-		lnp = lnlikelihood(params=params, MJD=MJD, mag=mag, err=err, model=model, mode=mode) + np.log(prior(params, MJD, model=model))
-	elif mode == 'S10':
-		lnp = lnlikelihood(params=params, MJD=MJD, mag=mag, err=err, model=model, mode=mode) + np.log(prior(params, MJD, model=model))
+	# lnprob function in MCMC
+	# Parameters:
+	# -------------
+	# 
+	# params: array
+	# 		c.f. SF_PL() and SF_DRW() for meanings of this parameter under different models.
+	# 
+	# MJD: array
+	# 		MJD array of the light curve.
+	# 
+	# mag: array
+	# 		magnitude array of the light curve. 
+	# 
+	# err: array
+	# 		error bar array of the light curve. 
+	# 
+	# model: str, optional
+	# 		structure function model adopted. 
+	# 		Default: 'DRW'
+	# 		
+	# mode: str, optional
+	# 		specific likelihood calculating scheme adopted.
+	# 		'KBS09': c.f. Kelly+09, complexity: O(N)
+	# 		'S10': c.f. Schmidt+10, complexity: O(N^2) 
+	# 
+	lnp = lnlikelihood(params=params, MJD=MJD, mag=mag, err=err, model=model, mode=mode) + np.log(prior(params, MJD, model=model))
 	if not np.isfinite(lnp):
 		return -np.inf
 	return lnp
 
 
-
-
-# def minimizee(params, MJD, mag, err, model="DRW"):
-# 	return -((lnlikelihood(params, MJD, mag, err, model, mode='S10')))
-
-def SF_fit_params(MJD, mag, err, obj_name=None, p0=[0.5, 0.5], model="DRW", MCMC_step=2000, MCMC_threads=8, mode='KBS09'):
-	# print "mag: ", mag
+def SF_fit_params(MJD, mag, err, obj_name=None, model="DRW", mode='KBS09', n_walkers=100, n_burn=200, n_MCMC=2000, n_threads=4):
+	# Structure function parameter fitting main driver using MCMC.
+	# Parameters:
+	# -------------
+	# 
+	# MJD: array
+	# 		MJD array of the light curve.
+	# 
+	# mag: array
+	# 		magnitude array of the light curve. 
+	# 
+	# err: array
+	# 		error bar array of the light curve. 
+	# 		
+	# obj_name: str, optional
+	# 		name of the object to be fitted.
+	# 		Default: None
+	# 
+	# model: str, optional
+	# 		structure function model adopted. 
+	# 		Default: 'DRW'
+	# 		
+	# mode: str, optional
+	# 		specific likelihood calculating scheme adopted.
+	# 		'KBS09': c.f. Kelly+09, complexity: O(N)
+	# 		'S10': c.f. Schmidt+10, complexity: O(N^2) 
+	# 
+	# n_walkers: int, optional
+	# 		number of walkers in MCMC.
+	# 		Default: 100
+	# 		
+	# n_burn: int, optional
+	# 		number of burn-in samplings in MCMC. 
+	# 		Default: 200
+	# 		
+	# n_MCMC: int, optional
+	# 		number of MCMC steps after burn-in. 
+	# 		Default: 2000
+	# 		
+	# n_threads: int, optional
+	# 		number of threads in MCMC.
+	# 		Default: 4
+	# 		
 	p_dict = {}
 	if model == "DRW":
-		# p_best = minimize(minimizee, p0, args=(MJD, mag, err, model), bounds=((-10,2), (0,4000)), method='TNC')
-		# p_dict['sigma'] = abs(p_best.x[0])
-		# p_dict['tau'] = p_best.x[1]
-	# 	# print "start minimizing."
-	# 	# p_best = minimize(minimizee, p0, args=(MJD, mag, err, model), bounds=((10,30), (0,2), (0,4000)), method='SLSQP')
-		ndim, nwalkers = 3, 100
-
-		sampler = EnsembleSampler(nwalkers, ndim, lnprob, args=(MJD, mag, err, model, mode), threads=MCMC_threads)
-		p0 = [np.array([20, 0.08, 30]) + 1e-3 * np.random.randn(ndim) for i in range(nwalkers)]
-		pos, prob, state = sampler.run_mcmc(p0, 200)
+		ndim = 3
+		sampler = EnsembleSampler(n_walkers, ndim, lnprob, args=(MJD, mag, err, model, mode), threads=n_threads)
+		p0 = [np.array([20, 0.08, 30]) + 1e-3 * np.random.randn(ndim) for i in range(n_walkers)]
+		pos, prob, state = sampler.run_mcmc(p0, n_burn)
 		sampler.reset()
-
-		sampler.run_mcmc(pos, MCMC_step)
-		samples = sampler.chain[:, MCMC_step / 2:, :].reshape((-1, ndim))
-
-		print "finished an MCMC1"
+		sampler.run_mcmc(pos, n_MCMC)
+		samples = sampler.chain[:, n_MCMC / 2:, :].reshape((-1, ndim))
 
 		# fig = corner.corner(samples, labels=["$b$", r"$\sigma$", r"$\tau$"])
 		# fig.savefig("./test.png")
@@ -150,8 +264,6 @@ def SF_fit_params(MJD, mag, err, obj_name=None, p0=[0.5, 0.5], model="DRW", MCMC
 		# 	fig_name = "./test_%s_%s.png" %(model, mode)
 		# 	fig.savefig(fig_name)
 	
-
-		print "finished an MCMC2"
 		p_best = [0] * 3
 		p_best[:] = map(lambda v: (v[1], v[2]-v[1], v[1]-v[0]), zip(*np.percentile(samples, [16, 50, 84], axis=0)))
 		p_dict = {}
@@ -166,25 +278,20 @@ def SF_fit_params(MJD, mag, err, obj_name=None, p0=[0.5, 0.5], model="DRW", MCMC
 		p_dict['sigma_M10'][2] = (p_best[0][2]**2 * p_best[2][0] / 2 + p_best[0][0]**2 * p_best[2][2]**2 / (8.0 * p_best[2][0]))**0.5
 	
 	elif model == "pow-law":
-		# print "PL"
-		# p_best = minimize(minimizee, p0, args=(MJD, mag, err, model), bounds=((-10,1), (0,1)), method='TNC')
-		# p_dict['A'] = abs(p_best.x[0])
-		# p_dict['gamma'] = p_best.x[1]
-
-		ndim, nwalkers = 2, 30
-
-		sampler = EnsembleSampler(nwalkers, ndim, lnprob, args=(MJD, mag, err, model, mode), threads=MCMC_threads)
-		p0 = [np.array([np.log(0.1), 0.1]) + 0.05 * np.random.randn(ndim) for i in range(nwalkers)]
-		pos, prob, state = sampler.run_mcmc(p0, 200)
+		ndim = 2
+		sampler = EnsembleSampler(n_walkers, ndim, lnprob, args=(MJD, mag, err, model, mode), threads=n_threads)
+		p0 = [np.array([np.log(0.1), 0.1]) + 0.05 * np.random.randn(ndim) for i in range(n_walkers)]
+		pos, prob, state = sampler.run_mcmc(p0, n_burn)
 		sampler.reset()
-
-		sampler.run_mcmc(pos, MCMC_step)
-		samples = sampler.chain[:, MCMC_step / 2:, :].reshape((-1, ndim))
+		sampler.run_mcmc(pos, n_MCMC)
+		samples = sampler.chain[:, n_MCMC / 2:, :].reshape((-1, ndim))
 
 		# fig = corner.corner(samples, labels=["$lnA$", r"$\gamma$"])
+		# if obj_name is not None:
+		# 	fig.savefig("./%s_%s_%s_corner.png" %(obj_name, model, mode))
 
-
-
+		# else:
+		# 	fig.savefig("./test_%s_%s.png" %(model, mode))
 
 		p_best = [0] * 2
 		p_best[:] = map(lambda v: (v[1], v[2]-v[1], v[1]-v[0]), zip(*np.percentile(samples, [16, 50, 84], axis=0)))
@@ -192,20 +299,27 @@ def SF_fit_params(MJD, mag, err, obj_name=None, p0=[0.5, 0.5], model="DRW", MCMC
 		p_dict['A'] = [np.exp(p_best[0][i]) for i in range(len(p_best[0]))]
 		p_dict['gamma'] = p_best[1]
 
-		# if obj_name is not None:
-		# 	fig.savefig("./%s_%s_%s_corner.png" %(obj_name, model, mode))
-
-		# else:
-		# 	fig.savefig("./test_%s_%s.png" %(model, mode))
-
-
-	# print p_best.x
-	# print p_best.success
 	return p_dict
 
 
 def SF_true(t, y, yerr, zp1, n_dt = 10):
-
+	# observed, binned structure functions of a given light curve.
+	# Parameters:
+	# ------------
+	# 
+	# t: array
+	# 		time array of the light curve. 
+	# 		
+	# y: array
+	# 		magnitude or flux array of the light curve.  
+	# 
+	# zp1: float
+	# 		the (1 + z) factor of the object, useless in this function, though
+	# 
+	# n_dt: int, optional
+	# 		the number of time bins between the min(del_t_set) and max(del_t_set). 
+	# 		Default: 10
+	# 		
 	t = t / 365.25
 	del_t_set = []
 	del_y_set = []
@@ -258,7 +372,7 @@ if __name__ == "__main__":
 	fit_tau = []
 	test_set = np.random.choice(9258, size=20)
 	j = 0
-	for i in range(10):
+	for i in range(20):
 
 		if drw_data['lgSigma'][i] <= -10 or drw_data['npts'][i] < 10 or\
 		   drw_data['Plike'][i] - drw_data['Pnoise'][i] <= 2 or\
