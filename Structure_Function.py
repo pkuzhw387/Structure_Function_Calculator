@@ -42,11 +42,14 @@ def lnLij(MJD, mag, err, params, i, j, model="DRW"):
 
 def prior(params, MJD, model='DRW'):
 	if model == 'DRW':
+
 		b, sigma, tau = params
 		intv = MJD[1:] - MJD[0:-1]
-		med_intv = np.median(intv)
-		return np.sum(np.exp(-med_intv / tau))
-		# return 1.0
+		# KBS09 prior
+		# med_intv = np.median(intv)
+		# return np.exp(-med_intv / tau) * med_intv / tau**2
+		# Koz10 prior
+		return 1 / (tau * sigma)
 	elif model == 'pow-law':
 		A = np.exp(params[0])
 		gamma = params[1]
@@ -115,7 +118,7 @@ def lnprob(params, MJD, mag, err, model="DRW", mode='KBS09'):
 # def minimizee(params, MJD, mag, err, model="DRW"):
 # 	return -((lnlikelihood(params, MJD, mag, err, model, mode='S10')))
 
-def SF_fit_params(MJD, mag, err, p0=[0.5, 0.5], model="DRW", MCMC_step=1000, MCMC_threads=8, mode='KBS09'):
+def SF_fit_params(MJD, mag, err, obj_name=None, p0=[0.5, 0.5], model="DRW", MCMC_step=2000, MCMC_threads=8, mode='KBS09'):
 	# print "mag: ", mag
 	p_dict = {}
 	if model == "DRW":
@@ -124,7 +127,7 @@ def SF_fit_params(MJD, mag, err, p0=[0.5, 0.5], model="DRW", MCMC_step=1000, MCM
 		# p_dict['tau'] = p_best.x[1]
 	# 	# print "start minimizing."
 	# 	# p_best = minimize(minimizee, p0, args=(MJD, mag, err, model), bounds=((10,30), (0,2), (0,4000)), method='SLSQP')
-		ndim, nwalkers = 3, 30
+		ndim, nwalkers = 3, 100
 
 		sampler = EnsembleSampler(nwalkers, ndim, lnprob, args=(MJD, mag, err, model, mode), threads=MCMC_threads)
 		p0 = [np.array([20, 0.08, 30]) + 1e-3 * np.random.randn(ndim) for i in range(nwalkers)]
@@ -133,7 +136,22 @@ def SF_fit_params(MJD, mag, err, p0=[0.5, 0.5], model="DRW", MCMC_step=1000, MCM
 
 		sampler.run_mcmc(pos, MCMC_step)
 		samples = sampler.chain[:, MCMC_step / 2:, :].reshape((-1, ndim))
-		print "finished an MCMC"
+
+		print "finished an MCMC1"
+
+		# fig = corner.corner(samples, labels=["$b$", r"$\sigma$", r"$\tau$"])
+		# fig.savefig("./test.png")
+		# if obj_name is not None:
+		# 	fig_name = "./%s_%s_%s_corner.png" %(obj_name, model, mode)
+		# 	print fig_name
+		# 	fig.savefig(fig_name)
+
+		# else:
+		# 	fig_name = "./test_%s_%s.png" %(model, mode)
+		# 	fig.savefig(fig_name)
+	
+
+		print "finished an MCMC2"
 		p_best = [0] * 3
 		p_best[:] = map(lambda v: (v[1], v[2]-v[1], v[1]-v[0]), zip(*np.percentile(samples, [16, 50, 84], axis=0)))
 		p_dict = {}
@@ -163,16 +181,23 @@ def SF_fit_params(MJD, mag, err, p0=[0.5, 0.5], model="DRW", MCMC_step=1000, MCM
 		sampler.run_mcmc(pos, MCMC_step)
 		samples = sampler.chain[:, MCMC_step / 2:, :].reshape((-1, ndim))
 
-		fig = corner.corner(samples, labels=["$lnA$", r"$\gamma$"])
-		fig.savefig("./test.png")
+		# fig = corner.corner(samples, labels=["$lnA$", r"$\gamma$"])
+
 
 
 
 		p_best = [0] * 2
 		p_best[:] = map(lambda v: (v[1], v[2]-v[1], v[1]-v[0]), zip(*np.percentile(samples, [16, 50, 84], axis=0)))
 		p_dict = {}
-		p_dict['A'] = np.exp(p_best[0][0])
-		p_dict['gamma'] = p_best[1][0]
+		p_dict['A'] = [np.exp(p_best[0][i]) for i in range(len(p_best[0]))]
+		p_dict['gamma'] = p_best[1]
+
+		# if obj_name is not None:
+		# 	fig.savefig("./%s_%s_%s_corner.png" %(obj_name, model, mode))
+
+		# else:
+		# 	fig.savefig("./test_%s_%s.png" %(model, mode))
+
 
 	# print p_best.x
 	# print p_best.success
@@ -231,9 +256,9 @@ if __name__ == "__main__":
 	paper_tau = []
 	fit_sigma = []
 	fit_tau = []
-	test_set = np.random.choice(9258, size=300)
+	test_set = np.random.choice(9258, size=20)
 	j = 0
-	for i in range(1):
+	for i in range(10):
 
 		if drw_data['lgSigma'][i] <= -10 or drw_data['npts'][i] < 10 or\
 		   drw_data['Plike'][i] - drw_data['Pnoise'][i] <= 2 or\
@@ -242,7 +267,7 @@ if __name__ == "__main__":
 		   print "skip."
 		   continue
 		# print np.where(dbID_data['SDR5ID'] == drw_data['SDR5ID'][i])
-		dbID = np.array(dbID_data['dbID'])[np.where(dbID_data['SDR5ID'] == '71597')][0]
+		dbID = np.array(dbID_data['dbID'])[np.where(dbID_data['SDR5ID'] == drw_data['SDR5ID'][i])][0]
 		lc_path = '/Users/zhanghaowen/Desktop/AGN/BroadBand_RM/QSO_S82/%s' %dbID
 		lc_data = pd.read_csv(lc_path, header=None, names=['MJD', 'mag', 'err'],\
 							  usecols=[3, 4, 5], delim_whitespace=True, dtype=np.float64)
@@ -256,55 +281,54 @@ if __name__ == "__main__":
 		err = np.ma.array(err, mask=mask).compressed()
 
 		try:
-			params = SF_fit_params(MJD, mag, err, model='pow-law', mode='S10')
-			print "A: ", params['A']
-			print "gamma: ", params['gamma']
-		except:
-			continue
+			params = SF_fit_params(MJD, mag, err, obj_name=drw_data['SDR5ID'][i], model='DRW', mode='KBS09')
+		except Exception as e:
+			if e is not KeyboardInterrupt:
+				continue
 		j += 1
-		# sigma = params['sigma_KBS09'][0]
-		# tau = params['tau'][0]
+		sigma = params['sigma_KBS09'][0]
+		tau = params['tau'][0]
 
 
 
 		# sigma = sigma * (2.0 / tau)**0.5
 
-	# 	paper_sigma.append((np.array(drw_data['lgSigma'][i])) - np.log10(365.25**0.5))
-	# 	paper_tau.append((np.array(drw_data['lgTau'][i])))
-	# 	fit_sigma.append(np.log10(sigma))
-	# 	fit_tau.append(np.log10(tau))
-	# 	print np.log10(sigma), np.log10(tau)
-	# 	print "finished %d fitting." %j
+		paper_sigma.append((np.array(drw_data['lgSigma'][i])) - np.log10(365.25**0.5))
+		paper_tau.append((np.array(drw_data['lgTau'][i])))
+		fit_sigma.append(np.log10(sigma))
+		fit_tau.append(np.log10(tau))
+		print np.log10(sigma), np.log10(tau)
+		print "finished %d fitting." %j
 
-	# paper_sigma = np.array(paper_sigma)
-	# paper_tau = np.array(paper_tau)
-	# fit_sigma = np.array(fit_sigma)
-	# fit_tau = np.array(fit_tau)
+	paper_sigma = np.array(paper_sigma)
+	paper_tau = np.array(paper_tau)
+	fit_sigma = np.array(fit_sigma)
+	fit_tau = np.array(fit_tau)
 
-	# DRW_dict = {}
+	DRW_dict = {}
 
-	# plt.scatter(paper_sigma, fit_sigma, color='blue')
-	# plt.plot(paper_sigma, paper_sigma, color='black')
-	# plt.xlabel('paper sigma')
-	# plt.ylabel('fitted sigma')
-	# plt.show()
-	# # plt.savefig('./sigma_paper_vs_code.png')
-	# plt.close()
+	plt.scatter(paper_sigma, fit_sigma, color='blue')
+	plt.plot(paper_sigma, paper_sigma, color='black')
+	plt.xlabel('paper sigma')
+	plt.ylabel('fitted sigma')
+	plt.show()
+	# plt.savefig('./sigma_paper_vs_code.png')
+	plt.close()
 
-	# plt.scatter(paper_tau, fit_tau, color='red')
-	# plt.plot(paper_tau, paper_tau, color='black')
-	# plt.xlabel('paper tau')
-	# plt.ylabel('fitted tau')
-	# plt.show()
-	# # plt.savefig('./sigma_paper_vs_code.png')
-	# plt.close()
+	plt.scatter(paper_tau, fit_tau, color='red')
+	plt.plot(paper_tau, paper_tau, color='black')
+	plt.xlabel('paper tau')
+	plt.ylabel('fitted tau')
+	plt.show()
+	# plt.savefig('./sigma_paper_vs_code.png')
+	plt.close()
 
-	# DRW_dict['paper_sigma'] = paper_sigma
-	# DRW_dict['paper_tau'] = paper_tau
-	# DRW_dict['fit_sigma'] = fit_sigma
-	# DRW_dict['fit_tau'] = fit_tau
+	DRW_dict['paper_sigma'] = paper_sigma
+	DRW_dict['paper_tau'] = paper_tau
+	DRW_dict['fit_sigma'] = fit_sigma
+	DRW_dict['fit_tau'] = fit_tau
 
-	# sio.savemat('./DRW_params_2.mat', DRW_dict)
+	sio.savemat('./DRW_params_2.mat', DRW_dict)
 
 
 
