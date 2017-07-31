@@ -187,7 +187,7 @@ def lnlikelihood(params, MJD, mag, err, model="DRW", mode='KBS09'):
 		if model == 'DRW':
 			intv = MJD[1:] - MJD[0:-1]
 			b, sigma, tau = params
-			hard_limit = 10 < b < 30 and 0 < tau * sigma**2 / 2 < 5 and 0 < tau < 4000 and sigma > 0
+			hard_limit = 10 < b < 30 and tau > 0 and sigma > 0
 			if hard_limit: 
 				# x* -> x_s
 				# x^ -> x_h
@@ -259,7 +259,7 @@ def lnprob(params, MJD, mag, err, model="DRW", mode='KBS09'):
 	return lnp
 
 
-def SF_fit_params(MJD, mag, err, obj_name=None, model="DRW", mode='KBS09', n_walkers=100, n_burn=200, n_MCMC=2000, n_threads=4):
+def SF_fit_params(MJD, mag, err, obj_name=None, model="DRW", mode='KBS09', n_walkers=100, n_burn=200, n_MCMC=2000, n_threads=8):
 	# Structure function parameter fitting main driver using MCMC.
 	# Parameters:
 	# -------------
@@ -449,7 +449,7 @@ if __name__ == "__main__":
 	fit_tau = []
 	test_set = np.random.choice(9258, size=20)
 	j = 0
-	for i in range(100):
+	for i in range(300):
 
 		if drw_data['lgSigma'][i] <= -10 or drw_data['npts'][i] < 10 or\
 		   drw_data['Plike'][i] - drw_data['Pnoise'][i] <= 2 or\
@@ -515,10 +515,10 @@ if __name__ == "__main__":
 	# # plt.savefig('./sigma_paper_vs_code.png')
 	# plt.close()
 
-	# DRW_dict['paper_sigma'] = paper_sigma
-	# DRW_dict['paper_tau'] = paper_tau
-	# DRW_dict['fit_sigma'] = fit_sigma
-	# DRW_dict['fit_tau'] = fit_tau
+	DRW_dict['paper_sigma'] = paper_sigma
+	DRW_dict['paper_tau'] = paper_tau
+	DRW_dict['fit_sigma'] = fit_sigma
+	DRW_dict['fit_tau'] = fit_tau
 
 	sio.savemat('./DRW_params_test.mat', DRW_dict)
 
